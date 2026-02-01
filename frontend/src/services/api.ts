@@ -1,6 +1,7 @@
 import type { User, Post, Comment, PageResponse, AuthResponse } from '../types';
 
-const API_BASE = '/api';
+// 生产环境使用环境变量，开发环境使用代理
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 // 获取存储的 token
 const getToken = () => localStorage.getItem('token');
