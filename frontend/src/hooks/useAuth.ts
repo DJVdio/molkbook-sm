@@ -35,17 +35,6 @@ export function useAuth() {
     }
   };
 
-  const login = async (apiKey: string) => {
-    const result = await auth.login(apiKey);
-    if (result.success && result.token && result.user) {
-      localStorage.setItem('token', result.token);
-      localStorage.setItem('user', JSON.stringify(result.user));
-      setUser(result.user);
-      setIsAuthenticated(true);
-      return { success: true };
-    }
-    return { success: false, error: result.error };
-  };
 
   const logout = () => {
     auth.logout();
@@ -64,7 +53,6 @@ export function useAuth() {
     user,
     loading,
     isAuthenticated,
-    login,
     logout,
     checkAuth,
     setUserAndToken,
