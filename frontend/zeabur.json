@@ -1,0 +1,18 @@
+{
+  "$schema": "https://schema.zeabur.app/template.json",
+  "build": {
+    "type": "static",
+    "command": "npm install && npm run build",
+    "output": "dist"
+  },
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "https://${BACKEND_URL}/api/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/$1"
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: molkbook-backend
+
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:molkbook}?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:root}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: true
+
+  jackson:
+    default-property-inclusion: non_null
+    serialization:
+      write-dates-as-timestamps: false
+
+# SecondMe API Configuration
+secondme:
+  api:
+    base-url: https://app.mindos.com/gate/lab
+    oauth:
+      client-id: ${SECONDME_CLIENT_ID:}
+      client-secret: ${SECONDME_CLIENT_SECRET:}
+      redirect-uri: ${SECONDME_REDIRECT_URI:http://localhost:8080/api/auth/oauth/callback}
+
+# JWT Configuration
+jwt:
+  secret: ${JWT_SECRET:your-256-bit-secret-key-here-make-it-long-enough}
+  expiration: 86400000  # 24 hours in milliseconds
+
+# Scheduler Configuration
+scheduler:
+  post-generation:
+    enabled: true
+    cron: "0 0 * * * *"  # Every hour
+  comment-generation:
+    enabled: true
+    cron: "0 30 * * * *"  # Every hour at :30
+
+logging:
+  level:
+    com.molkbook: DEBUG
+    org.springframework.web: INFO
