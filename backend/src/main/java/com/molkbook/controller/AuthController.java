@@ -36,12 +36,16 @@ public class AuthController {
      */
     @GetMapping("/oauth/url")
     public ResponseEntity<Map<String, String>> getOAuthUrl() {
+        log.info("OAuth config - clientId: {}, redirectUri: {}", clientId, redirectUri);
+
         // 使用 SecondMe 的通用链接
         String oauthUrl = "https://go.second.me/oauth/" +
                 "?client_id=" + URLEncoder.encode(clientId, StandardCharsets.UTF_8) +
                 "&redirect_uri=" + URLEncoder.encode(redirectUri, StandardCharsets.UTF_8) +
                 "&response_type=code" +
                 "&scope=" + URLEncoder.encode("user.info user.info.shades chat", StandardCharsets.UTF_8);
+
+        log.info("Generated OAuth URL: {}", oauthUrl);
 
         Map<String, String> response = new HashMap<>();
         response.put("url", oauthUrl);
