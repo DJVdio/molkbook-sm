@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { Post, User } from '../types';
 import { posts, SortBy } from '../services/api';
 import PostCard from '../components/PostCard';
@@ -18,9 +18,11 @@ export default function Home({ user }: HomeProps) {
   const [postList, setPostList] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [streamingContent, setStreamingContent] = useState('');
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [sortBy, setSortBy] = useState<SortBy>('newest');
+  const abortRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     loadPosts(0, sortBy);
@@ -57,21 +59,37 @@ export default function Home({ user }: HomeProps) {
       return;
     }
 
-    try {
-      setGenerating(true);
-      const result = await posts.generate();
-      if (result.success && result.post) {
-        setPostList((prev) => [result.post!, ...prev]);
-      } else {
-        alert(result.error || '生成失败');
-      }
-    } catch (error) {
-      console.error('Failed to generate post:', error);
-      alert('生成帖子失败');
-    } finally {
-      setGenerating(false);
-    }
+    setGenerating(true);
+    setStreamingContent('');
+
+    // 使用流式生成
+    abortRef.current = posts.generateStream({
+      onChunk: (chunk) => {
+        setStreamingContent((prev) => prev + chunk);
+      },
+      onDone: () => {
+        // 刷新帖子列表
+        loadPosts(0, sortBy);
+        setStreamingContent('');
+        setGenerating(false);
+      },
+      onError: (error) => {
+        console.error('Stream error:', error);
+        alert('生成帖子失败: ' + error);
+        setStreamingContent('');
+        setGenerating(false);
+      },
+    });
   };
+
+  // 清理函数
+  useEffect(() => {
+    return () => {
+      if (abortRef.current) {
+        abortRef.current();
+      }
+    };
+  }, []);
 
   const loadMore = () => {
     if (!loading && hasMore) {
@@ -158,6 +176,37 @@ export default function Home({ user }: HomeProps) {
           </div>
         </div>
       </div>
+
+      {/* Streaming Preview */}
+      {generating && streamingContent && (
+        <div className="card card-corners p-6 fade-in border-[var(--neon-cyan)]/50">
+          <div className="flex items-start gap-4 mb-4">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[var(--neon-cyan)]/30 to-[var(--neon-violet)]/30 flex items-center justify-center">
+              <svg className="w-5 h-5 text-[var(--neon-cyan)] animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <span className="font-['Orbitron'] font-medium text-sm tracking-wider text-[var(--neon-cyan)]">
+                  {user?.name || 'AI'}
+                </span>
+                <span className="tag tag-ai">
+                  <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
+                  GENERATING
+                </span>
+              </div>
+              <span className="text-[10px] font-['Space_Mono'] text-[var(--text-muted)]">
+                // Neural processing...
+              </span>
+            </div>
+          </div>
+          <p className="text-[var(--text-secondary)] leading-relaxed whitespace-pre-wrap">
+            {streamingContent}
+            <span className="inline-block w-2 h-4 bg-[var(--neon-cyan)] animate-pulse ml-1" />
+          </p>
+        </div>
+      )}
 
       {/* Post List */}
       {loading && postList.length === 0 ? (

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import type { Post, User, Comment } from '../types';
 import { posts, comments } from '../services/api';
@@ -15,6 +15,8 @@ export default function PostDetail({ user }: PostDetailProps) {
   const [commentList, setCommentList] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const [generatingComment, setGeneratingComment] = useState(false);
+  const [streamingComment, setStreamingComment] = useState('');
+  const abortRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (id) {
@@ -38,21 +40,37 @@ export default function PostDetail({ user }: PostDetailProps) {
   const handleGenerateComment = async () => {
     if (!post || !user) return;
 
-    try {
-      setGeneratingComment(true);
-      const result = await comments.generate(post.id);
-      if (result.success && result.comment) {
-        setCommentList((prev) => [...prev, result.comment!]);
-      } else {
-        alert(result.error || '生成评论失败');
-      }
-    } catch (error) {
-      console.error('Failed to generate comment:', error);
-      alert('生成评论失败');
-    } finally {
-      setGeneratingComment(false);
-    }
+    setGeneratingComment(true);
+    setStreamingComment('');
+
+    // 使用流式生成
+    abortRef.current = comments.generateStream(post.id, {
+      onChunk: (chunk) => {
+        setStreamingComment((prev) => prev + chunk);
+      },
+      onDone: () => {
+        // 刷新评论列表
+        loadPost(post.id);
+        setStreamingComment('');
+        setGeneratingComment(false);
+      },
+      onError: (error) => {
+        console.error('Stream error:', error);
+        alert('生成评论失败: ' + error);
+        setStreamingComment('');
+        setGeneratingComment(false);
+      },
+    });
   };
+
+  // 清理函数
+  useEffect(() => {
+    return () => {
+      if (abortRef.current) {
+        abortRef.current();
+      }
+    };
+  }, []);
 
   const handleGenerateRandomComment = async () => {
     if (!post) return;
@@ -251,6 +269,33 @@ export default function PostDetail({ user }: PostDetailProps) {
             </button>
           </div>
         </div>
+
+        {/* Streaming Comment Preview */}
+        {generatingComment && streamingComment && (
+          <div className="mb-6 p-4 rounded-lg bg-[var(--bg-elevated)] border border-[var(--neon-cyan)]/30">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[var(--neon-cyan)]/30 to-[var(--neon-violet)]/30 flex items-center justify-center shrink-0">
+                <svg className="w-4 h-4 text-[var(--neon-cyan)] animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="font-['Orbitron'] text-xs font-medium text-[var(--neon-cyan)]">
+                    {user?.name || 'AI'}
+                  </span>
+                  <span className="text-[10px] font-['Space_Mono'] text-[var(--text-muted)] bg-[var(--neon-cyan)]/10 px-2 py-0.5 rounded">
+                    GENERATING...
+                  </span>
+                </div>
+                <p className="text-sm text-[var(--text-secondary)] leading-relaxed whitespace-pre-wrap">
+                  {streamingComment}
+                  <span className="inline-block w-1.5 h-3 bg-[var(--neon-cyan)] animate-pulse ml-0.5" />
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Comment List */}
         <CommentList comments={commentList} />

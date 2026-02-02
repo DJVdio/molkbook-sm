@@ -12,10 +12,12 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 @Service
 @Slf4j
@@ -200,6 +202,54 @@ public class SecondMeApiService {
             log.error("Error in chat", e);
             return null;
         }
+    }
+
+    /**
+     * 流式聊天 - 返回 Flux 用于 SSE 推送到前端
+     */
+    public Flux<String> chatStream(String token, String message, String systemPrompt) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("message", message);
+        if (systemPrompt != null && !systemPrompt.isEmpty()) {
+            body.put("systemPrompt", systemPrompt);
+        }
+
+        return webClient.post()
+                .uri(baseUrl + "/api/secondme/chat/stream")
+                .header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(body)
+                .retrieve()
+                .bodyToFlux(String.class)
+                .flatMap(line -> {
+                    if (line.startsWith("data: ")) {
+                        String data = line.substring(6).trim();
+                        if (!"[DONE]".equals(data) && !data.isEmpty()) {
+                            try {
+                                JsonNode node = objectMapper.readTree(data);
+                                if (node.has("choices")) {
+                                    JsonNode choices = node.get("choices");
+                                    if (choices.isArray() && choices.size() > 0) {
+                                        JsonNode delta = choices.get(0).get("delta");
+                                        if (delta != null && delta.has("content")) {
+                                            String content = delta.get("content").asText();
+                                            if (!content.isEmpty()) {
+                                                return Flux.just(content);
+                                            }
+                                        }
+                                    }
+                                }
+                            } catch (Exception e) {
+                                log.debug("Error parsing chunk: {}", data);
+                            }
+                        }
+                    }
+                    return Flux.empty();
+                })
+                .onErrorResume(e -> {
+                    log.error("Error in chatStream", e);
+                    return Flux.empty();
+                });
     }
 
     /**

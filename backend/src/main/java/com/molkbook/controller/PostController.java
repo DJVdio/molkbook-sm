@@ -4,13 +4,16 @@ import com.molkbook.config.AuthHelper;
 import com.molkbook.dto.PostDTO;
 import com.molkbook.entity.Post;
 import com.molkbook.entity.User;
+import com.molkbook.service.AIGenerationService;
 import com.molkbook.service.PostService;
 import com.molkbook.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Flux;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -27,6 +30,7 @@ public class PostController {
     private final PostService postService;
     private final UserService userService;
     private final AuthHelper authHelper;
+    private final AIGenerationService aiGenerationService;
 
     /**
      * 获取帖子列表
@@ -161,5 +165,56 @@ public class PostController {
                     "error", "Failed to generate post"
             ));
         }
+    }
+
+    /**
+     * AI 流式生成帖子内容
+     * 返回 SSE 流，前端可以实时显示生成内容
+     */
+    @PostMapping(value = "/generate/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<String> generatePostStream(
+            @RequestHeader("Authorization") String authHeader) {
+
+        Long userId = authHelper.extractUserId(authHeader);
+        if (userId == null) {
+            return Flux.just("event: error\ndata: Unauthorized\n\n");
+        }
+
+        Optional<User> userOpt = userService.findById(userId);
+        if (userOpt.isEmpty()) {
+            return Flux.just("event: error\ndata: User not found\n\n");
+        }
+
+        User user = userOpt.get();
+        StringBuilder contentBuilder = new StringBuilder();
+
+        return aiGenerationService.generatePostContentStream(user)
+                .map(chunk -> {
+                    contentBuilder.append(chunk);
+                    return "data: " + chunk.replace("\n", "\\n") + "\n\n";
+                })
+                .concatWith(Flux.defer(() -> {
+                    // 流结束后，保存帖子并返回完整信息
+                    String content = contentBuilder.toString();
+                    if (!content.isEmpty()) {
+                        try {
+                            Post post = postService.createPost(user, content, null);
+                            String postJson = String.format(
+                                    "{\"id\":%d,\"content\":\"%s\"}",
+                                    post.getId(),
+                                    content.replace("\"", "\\\"").replace("\n", "\\n")
+                            );
+                            return Flux.just("event: done\ndata: " + postJson + "\n\n");
+                        } catch (Exception e) {
+                            log.error("Error saving post", e);
+                            return Flux.just("event: error\ndata: Failed to save post\n\n");
+                        }
+                    }
+                    return Flux.just("event: error\ndata: No content generated\n\n");
+                }))
+                .onErrorResume(e -> {
+                    log.error("Error in streaming post generation", e);
+                    return Flux.just("event: error\ndata: " + e.getMessage() + "\n\n");
+                });
     }
 }

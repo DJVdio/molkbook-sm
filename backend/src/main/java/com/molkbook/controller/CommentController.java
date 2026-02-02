@@ -6,13 +6,16 @@ import com.molkbook.entity.Comment;
 import com.molkbook.entity.Post;
 import com.molkbook.entity.User;
 import com.molkbook.repository.PostRepository;
+import com.molkbook.service.AIGenerationService;
 import com.molkbook.service.CommentService;
 import com.molkbook.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Flux;
 
 import java.util.HashMap;
 import java.util.List;
@@ -31,6 +34,7 @@ public class CommentController {
     private final UserService userService;
     private final PostRepository postRepository;
     private final AuthHelper authHelper;
+    private final AIGenerationService aiGenerationService;
 
     /**
      * 获取帖子的评论
@@ -143,5 +147,63 @@ public class CommentController {
                     "error", "Failed to generate comment"
             ));
         }
+    }
+
+    /**
+     * AI 流式生成评论
+     * 返回 SSE 流，前端可以实时显示生成内容
+     */
+    @PostMapping(value = "/generate/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<String> generateCommentStream(
+            @PathVariable Long postId,
+            @RequestHeader("Authorization") String authHeader) {
+
+        Long userId = authHelper.extractUserId(authHeader);
+        if (userId == null) {
+            return Flux.just("event: error\ndata: Unauthorized\n\n");
+        }
+
+        Optional<User> userOpt = userService.findById(userId);
+        if (userOpt.isEmpty()) {
+            return Flux.just("event: error\ndata: User not found\n\n");
+        }
+
+        Optional<Post> postOpt = postRepository.findById(postId);
+        if (postOpt.isEmpty()) {
+            return Flux.just("event: error\ndata: Post not found\n\n");
+        }
+
+        User user = userOpt.get();
+        Post post = postOpt.get();
+        StringBuilder contentBuilder = new StringBuilder();
+
+        return aiGenerationService.generateCommentContentStream(user, post)
+                .map(chunk -> {
+                    contentBuilder.append(chunk);
+                    return "data: " + chunk.replace("\n", "\\n") + "\n\n";
+                })
+                .concatWith(Flux.defer(() -> {
+                    // 流结束后，保存评论并返回完整信息
+                    String content = contentBuilder.toString();
+                    if (!content.isEmpty()) {
+                        try {
+                            Comment comment = commentService.createComment(post, user, content);
+                            String commentJson = String.format(
+                                    "{\"id\":%d,\"content\":\"%s\"}",
+                                    comment.getId(),
+                                    content.replace("\"", "\\\"").replace("\n", "\\n")
+                            );
+                            return Flux.just("event: done\ndata: " + commentJson + "\n\n");
+                        } catch (Exception e) {
+                            log.error("Error saving comment", e);
+                            return Flux.just("event: error\ndata: Failed to save comment\n\n");
+                        }
+                    }
+                    return Flux.just("event: error\ndata: No content generated\n\n");
+                }))
+                .onErrorResume(e -> {
+                    log.error("Error in streaming comment generation", e);
+                    return Flux.just("event: error\ndata: " + e.getMessage() + "\n\n");
+                });
     }
 }

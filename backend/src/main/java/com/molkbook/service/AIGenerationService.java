@@ -8,6 +8,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import reactor.core.publisher.Flux;
+
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -47,6 +49,47 @@ public class AIGenerationService {
 
         log.warn("Failed to generate post content for user {}, content is null or empty", user.getId());
         return null;
+    }
+
+    /**
+     * 流式生成帖子内容
+     */
+    public Flux<String> generatePostContentStream(User user) {
+        log.info("Starting streaming post generation for user {} ({})", user.getId(), user.getName());
+        String token = user.getSecondmeToken();
+
+        // 获取用户信息和兴趣标签
+        SecondMeUserInfo userInfo = secondMeApiService.getUserInfo(token);
+        List<SecondMeShade> shades = secondMeApiService.getUserShades(token);
+
+        // 构建 prompt
+        String systemPrompt = buildPostGenerationSystemPrompt(userInfo, shades);
+        String userMessage = "请基于你的个性和兴趣，分享一个想法、观点或者日常感悟。内容要有趣、有深度，能引发讨论。直接输出内容，不要有多余的开场白。字数控制在50-200字之间。";
+
+        return secondMeApiService.chatStream(token, userMessage, systemPrompt);
+    }
+
+    /**
+     * 流式生成评论内容
+     */
+    public Flux<String> generateCommentContentStream(User commenter, Post post) {
+        String token = commenter.getSecondmeToken();
+
+        // 获取评论者的信息和兴趣
+        SecondMeUserInfo userInfo = secondMeApiService.getUserInfo(token);
+        List<SecondMeShade> shades = secondMeApiService.getUserShades(token);
+
+        // 构建 prompt
+        String systemPrompt = buildCommentGenerationSystemPrompt(userInfo, shades);
+        String userMessage = String.format(
+                "请对以下帖子发表你的看法和评论：\n\n「%s」\n\n" +
+                "发帖人：%s\n\n" +
+                "请基于你自己的观点和经历来回复，可以赞同、补充、讨论或礼貌地表达不同意见。直接输出评论内容，不要有多余的开场白。字数控制在20-100字之间。",
+                post.getContent(),
+                post.getUser().getName() != null ? post.getUser().getName() : "匿名用户"
+        );
+
+        return secondMeApiService.chatStream(token, userMessage, systemPrompt);
     }
 
     /**
