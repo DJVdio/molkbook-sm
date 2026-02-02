@@ -5,6 +5,7 @@ import com.molkbook.entity.Comment;
 import com.molkbook.entity.Post;
 import com.molkbook.entity.User;
 import com.molkbook.repository.CommentRepository;
+import com.molkbook.repository.PostRepository;
 import javax.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,9 +22,9 @@ import java.util.List;
 public class CommentService {
 
     private final CommentRepository commentRepository;
+    private final PostRepository postRepository;
     private final UserService userService;
     private final AIGenerationService aiGenerationService;
-    // 移除 PostService 依赖，避免循环依赖（PostService -> CommentService -> PostService）
 
     /**
      * 获取帖子的评论（分页）
@@ -52,7 +53,13 @@ public class CommentService {
                 .content(content)
                 .aiGenerated(true)
                 .build();
-        return commentRepository.save(comment);
+        Comment savedComment = commentRepository.save(comment);
+
+        // 更新帖子的评论数
+        post.setCommentCount((post.getCommentCount() != null ? post.getCommentCount() : 0) + 1);
+        postRepository.save(post);
+
+        return savedComment;
     }
 
     /**

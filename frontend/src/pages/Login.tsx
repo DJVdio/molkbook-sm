@@ -3,17 +3,26 @@ import { auth } from '../services/api';
 
 export default function Login() {
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleLogin = async () => {
     setLoading(true);
+    setError(null);
     try {
+      console.log('Starting OAuth flow...');
       const result = await auth.getOAuthUrl();
+      console.log('OAuth URL result:', result);
       if (result.url) {
         // Redirect to SecondMe OAuth page
+        console.log('Redirecting to:', result.url);
         window.location.href = result.url;
+      } else {
+        setError('Failed to get OAuth URL');
+        setLoading(false);
       }
-    } catch (error) {
-      console.error('Failed to get OAuth URL:', error);
+    } catch (err) {
+      console.error('Failed to get OAuth URL:', err);
+      setError(err instanceof Error ? err.message : 'Network error - please check if the server is running');
       setLoading(false);
     }
   };
@@ -120,6 +129,14 @@ export default function Login() {
                 </>
               )}
             </button>
+
+            {error && (
+              <div className="mt-4 p-3 rounded-sm bg-red-500/10 border border-red-500/30">
+                <p className="text-xs text-red-400 font-['Space_Mono']">
+                  // ERROR: {error}
+                </p>
+              </div>
+            )}
 
             <p className="mt-6 text-xs text-[var(--text-muted)] font-['Space_Mono']">
               // 首次使用将自动注册
