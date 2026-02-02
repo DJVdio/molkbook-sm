@@ -1,0 +1,18 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": {
+          "tool": "Bash",
+          "command_pattern": "git commit"
+        },
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'BLOCKED: 请先运行 /code-review 进行代码审查，然后再提交。'"
+          }
+        ]
+      }
+    ]
+  }
+}
