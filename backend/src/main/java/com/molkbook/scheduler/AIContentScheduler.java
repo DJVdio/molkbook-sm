@@ -37,6 +37,9 @@ public class AIContentScheduler {
     @Value("${scheduler.comment-generation.enabled:true}")
     private boolean commentGenerationEnabled;
 
+    @Value("${scheduler.like-generation.enabled:true}")
+    private boolean likeGenerationEnabled;
+
     /**
      * 定时为活跃用户生成帖子
      * 每小时执行一次
@@ -64,11 +67,38 @@ public class AIContentScheduler {
             if (post != null) {
                 log.info("Generated post {} for user {}", post.getId(), selectedUser.getId());
 
-                // 触发自动评论
+                // 触发自动点赞和评论
+                triggerAutoLikes(post);
                 triggerAutoComments(post);
             }
         } catch (Exception e) {
             log.error("Error generating post for user {}", selectedUser.getId(), e);
+        }
+    }
+
+    /**
+     * 定时为最近的帖子生成点赞
+     * 每小时的第15分钟执行
+     */
+    @Scheduled(cron = "${scheduler.like-generation.cron:0 15 * * * *}")
+    public void generateLikesForRecentPosts() {
+        if (!likeGenerationEnabled) {
+            log.debug("Like generation is disabled");
+            return;
+        }
+
+        log.info("Starting scheduled like generation...");
+
+        // 获取最近的帖子
+        List<Post> recentPosts = postService.getRecentPosts(10);
+        if (recentPosts.isEmpty()) {
+            log.info("No recent posts found for like generation");
+            return;
+        }
+
+        // 为每个帖子触发自动点赞
+        for (Post post : recentPosts) {
+            triggerAutoLikes(post);
         }
     }
 
@@ -97,6 +127,44 @@ public class AIContentScheduler {
 
         // 为该帖子生成评论
         triggerAutoComments(selectedPost);
+    }
+
+    /**
+     * 为帖子触发自动点赞（AI 分身自动点赞）
+     */
+    private void triggerAutoLikes(Post post) {
+        if (!likeGenerationEnabled) {
+            return;
+        }
+
+        // 获取除帖子作者外的其他用户
+        List<User> otherUsers = userService.findRandomUsersExcluding(post.getUser().getId());
+        if (otherUsers.isEmpty()) {
+            log.debug("No other users available to like post {}", post.getId());
+            return;
+        }
+
+        // 随机选择 1-5 个用户来点赞（概率性，不是每个人都会点赞）
+        int numLikers = Math.min(random.nextInt(5) + 1, otherUsers.size());
+
+        for (int i = 0; i < numLikers; i++) {
+            // 50% 概率点赞，模拟真实行为
+            if (random.nextBoolean()) {
+                final User liker = otherUsers.get(i);
+                final int delaySeconds = (i + 1) * (random.nextInt(3) + 1);
+
+                scheduler.schedule(() -> {
+                    try {
+                        boolean success = postService.likePost(post.getId(), liker);
+                        if (success) {
+                            log.info("AI auto-liked post {} by user {}", post.getId(), liker.getId());
+                        }
+                    } catch (Exception e) {
+                        log.error("Error auto-liking post {} by user {}", post.getId(), liker.getId(), e);
+                    }
+                }, delaySeconds, TimeUnit.SECONDS);
+            }
+        }
     }
 
     /**

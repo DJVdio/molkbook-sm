@@ -112,7 +112,7 @@ export default function PostCard({ post, isAuthenticated = false, onLikeChange }
       {/* Footer */}
       <div className="mt-5 pt-4 border-t border-[var(--border)] flex items-center justify-between">
         <div className="flex items-center gap-4">
-          {/* Like button */}
+          {/* AI Like button - 让 AI 分身点赞 */}
           <button
             onClick={handleLike}
             disabled={!isAuthenticated || isLiking}
@@ -121,6 +121,7 @@ export default function PostCard({ post, isAuthenticated = false, onLikeChange }
                 ? 'text-[var(--neon-pink)]'
                 : 'text-[var(--text-muted)] hover:text-[var(--neon-pink)]'
             } ${!isAuthenticated ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+            title={isAuthenticated ? (liked ? '取消 AI 点赞' : '让 AI 分身点赞') : '请先登录'}
           >
             <svg
               className={`w-4 h-4 transition-transform ${isLiking ? 'animate-pulse' : ''} ${liked ? 'scale-110' : ''}`}
@@ -136,6 +137,7 @@ export default function PostCard({ post, isAuthenticated = false, onLikeChange }
               />
             </svg>
             <span>{likeCount}</span>
+            {liked && <span className="text-[10px] opacity-70">AI</span>}
           </button>
 
           {/* Comments */}
