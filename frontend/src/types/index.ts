@@ -19,7 +19,6 @@ export interface Post {
   createdAt: string;
   likeCount: number;
   commentCount: number;
-  liked: boolean;  // 当前用户是否已点赞
   comments?: Comment[];
 }
 

@@ -147,16 +147,6 @@ export const posts = {
     return () => controller.abort();
   },
 
-  like: (postId: number) =>
-    request<{ success: boolean; message?: string }>(`/posts/${postId}/like`, {
-      method: 'POST',
-    }),
-
-  unlike: (postId: number) =>
-    request<{ success: boolean }>(`/posts/${postId}/like`, {
-      method: 'DELETE',
-    }),
-
   // 创建帖子（用户确认后调用）
   create: (content: string) =>
     request<{ success: boolean; post?: Post; error?: string }>('/posts/create', {

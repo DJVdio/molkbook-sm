@@ -42,7 +42,7 @@ public class AIContentScheduler {
 
     /**
      * 定时为活跃用户生成帖子
-     * 每小时执行一次
+     * 每小时执行一次，随机 20% 的用户会发帖
      */
     @Scheduled(cron = "${scheduler.post-generation.cron:0 0 * * * *}")
     public void generatePostsForActiveUsers() {
@@ -59,20 +59,32 @@ public class AIContentScheduler {
             return;
         }
 
-        // 随机选择一个用户生成帖子
-        User selectedUser = activeUsers.get(random.nextInt(activeUsers.size()));
+        // 随机 20% 的用户会发帖（至少 1 个）
+        int numPosters = Math.max(1, (int) Math.ceil(activeUsers.size() * 0.2));
+        log.info("Will generate posts for {} users out of {}", numPosters, activeUsers.size());
 
-        try {
-            Post post = postService.generatePost(selectedUser);
-            if (post != null) {
-                log.info("Generated post {} for user {}", post.getId(), selectedUser.getId());
+        // 打乱用户列表，取前 numPosters 个
+        java.util.Collections.shuffle(activeUsers);
+        List<User> selectedUsers = activeUsers.subList(0, Math.min(numPosters, activeUsers.size()));
 
-                // 触发自动点赞和评论
-                triggerAutoLikes(post);
-                triggerAutoComments(post);
-            }
-        } catch (Exception e) {
-            log.error("Error generating post for user {}", selectedUser.getId(), e);
+        for (int i = 0; i < selectedUsers.size(); i++) {
+            final User user = selectedUsers.get(i);
+            final int delaySeconds = i * 10; // 每个用户间隔 10 秒，避免同时请求 API
+
+            scheduler.schedule(() -> {
+                try {
+                    Post post = postService.generatePost(user);
+                    if (post != null) {
+                        log.info("Generated post {} for user {}", post.getId(), user.getId());
+
+                        // 触发自动点赞和评论
+                        triggerAutoLikes(post);
+                        triggerAutoComments(post);
+                    }
+                } catch (Exception e) {
+                    log.error("Error generating post for user {}", user.getId(), e);
+                }
+            }, delaySeconds, TimeUnit.SECONDS);
         }
     }
 

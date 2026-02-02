@@ -350,7 +350,7 @@ export default function Home({ user }: HomeProps) {
               className="fade-in"
               style={{ animationDelay: `${index * 0.05}s` }}
             >
-              <PostCard post={post} isAuthenticated={!!user} />
+              <PostCard post={post} />
             </div>
           ))}
 
