@@ -155,7 +155,13 @@ public class UserService {
      * 获取随机用户（排除多个指定用户，限制数量）
      */
     public List<User> findRandomUsersExcludingMultiple(List<Long> excludeUserIds, int limit) {
-        List<User> users = userRepository.findRandomUsersExcludingMultiple(excludeUserIds);
+        List<User> users;
+        // 处理空列表的情况，避免 SQL NOT IN () 报错
+        if (excludeUserIds == null || excludeUserIds.isEmpty()) {
+            users = userRepository.findAllRandomUsers();
+        } else {
+            users = userRepository.findRandomUsersExcludingMultiple(excludeUserIds);
+        }
         if (users.size() <= limit) {
             return users;
         }

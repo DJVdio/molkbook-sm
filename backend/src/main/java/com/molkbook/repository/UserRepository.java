@@ -15,11 +15,14 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findBySecondmeToken(String secondmeToken);
 
-    @Query("SELECT u FROM User u WHERE u.id != :excludeUserId ORDER BY FUNCTION('RAND')")
+    @Query(value = "SELECT * FROM users WHERE id != :excludeUserId ORDER BY RAND()", nativeQuery = true)
     List<User> findRandomUsersExcluding(Long excludeUserId);
 
-    @Query("SELECT u FROM User u WHERE u.id NOT IN :excludeUserIds ORDER BY FUNCTION('RAND')")
+    @Query(value = "SELECT * FROM users WHERE id NOT IN (:excludeUserIds) ORDER BY RAND()", nativeQuery = true)
     List<User> findRandomUsersExcludingMultiple(List<Long> excludeUserIds);
+
+    @Query(value = "SELECT * FROM users ORDER BY RAND()", nativeQuery = true)
+    List<User> findAllRandomUsers();
 
     @Query("SELECT u FROM User u ORDER BY u.updatedAt DESC")
     List<User> findActiveUsers();

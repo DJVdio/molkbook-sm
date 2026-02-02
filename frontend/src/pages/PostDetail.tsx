@@ -95,7 +95,8 @@ export default function PostDetail({ user }: PostDetailProps) {
       }
     } catch (error) {
       console.error('Failed to generate random comment:', error);
-      alert('生成评论失败');
+      const errorMsg = error instanceof Error ? error.message : '生成评论失败';
+      alert(errorMsg);
     } finally {
       setGeneratingComment(false);
     }
@@ -161,7 +162,8 @@ export default function PostDetail({ user }: PostDetailProps) {
       }
     } catch (error) {
       console.error('Failed to generate random reply:', error);
-      alert('生成回复失败');
+      const errorMsg = error instanceof Error ? error.message : '生成回复失败';
+      alert(errorMsg);
     } finally {
       setGeneratingReply(false);
     }
