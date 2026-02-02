@@ -141,6 +141,17 @@ public class UserService {
     }
 
     /**
+     * 获取随机用户（排除指定用户，限制数量）
+     */
+    public List<User> findRandomUsersExcluding(Long excludeUserId, int limit) {
+        List<User> users = userRepository.findRandomUsersExcluding(excludeUserId);
+        if (users.size() <= limit) {
+            return users;
+        }
+        return users.subList(0, limit);
+    }
+
+    /**
      * 转换为 DTO
      */
     public UserDTO toDTO(User user) {

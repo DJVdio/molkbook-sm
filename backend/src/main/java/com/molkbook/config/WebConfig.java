@@ -13,10 +13,12 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addCorsMappings(CorsRegistry registry) {
+        // 使用配置的允许域名，而不是通配符
+        String[] origins = allowedOrigins.split(",");
         registry.addMapping("/api/**")
-                .allowedOriginPatterns("*")
+                .allowedOrigins(origins)
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
-                .allowedHeaders("*")
+                .allowedHeaders("Content-Type", "Authorization", "X-Requested-With")
                 .allowCredentials(true)
                 .maxAge(3600);
     }

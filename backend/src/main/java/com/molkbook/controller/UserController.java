@@ -1,6 +1,6 @@
 package com.molkbook.controller;
 
-import com.molkbook.config.JwtUtil;
+import com.molkbook.config.AuthHelper;
 import com.molkbook.dto.UserDTO;
 import com.molkbook.entity.User;
 import com.molkbook.service.UserService;
@@ -17,7 +17,7 @@ import java.util.Optional;
 public class UserController {
 
     private final UserService userService;
-    private final JwtUtil jwtUtil;
+    private final AuthHelper authHelper;
 
     /**
      * 获取当前用户信息
@@ -26,7 +26,7 @@ public class UserController {
     public ResponseEntity<UserDTO> getCurrentUser(
             @RequestHeader("Authorization") String authHeader) {
 
-        Long userId = extractUserId(authHeader);
+        Long userId = authHelper.extractUserId(authHeader);
         if (userId == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
@@ -44,16 +44,5 @@ public class UserController {
         Optional<User> user = userService.findById(id);
         return user.map(u -> ResponseEntity.ok(userService.toDTO(u)))
                 .orElse(ResponseEntity.notFound().build());
-    }
-
-    private Long extractUserId(String authHeader) {
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            return null;
-        }
-        String token = authHeader.substring(7);
-        if (!jwtUtil.isTokenValid(token)) {
-            return null;
-        }
-        return jwtUtil.extractUserId(token);
     }
 }

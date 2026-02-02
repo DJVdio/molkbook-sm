@@ -8,11 +8,14 @@ import com.molkbook.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 @Component
 @Slf4j
@@ -23,6 +26,10 @@ public class AIContentScheduler {
     private final PostService postService;
     private final CommentService commentService;
     private final Random random = new Random();
+
+    // 使用 ScheduledExecutorService 替代 Thread.sleep
+    private final java.util.concurrent.ScheduledExecutorService scheduler =
+            java.util.concurrent.Executors.newScheduledThreadPool(2);
 
     @Value("${scheduler.post-generation.enabled:true}")
     private boolean postGenerationEnabled;
@@ -93,7 +100,7 @@ public class AIContentScheduler {
     }
 
     /**
-     * 为帖子触发自动评论
+     * 为帖子触发自动评论（异步执行，不阻塞调度线程）
      */
     private void triggerAutoComments(Post post) {
         // 获取除帖子作者外的其他用户
@@ -107,16 +114,18 @@ public class AIContentScheduler {
         int numCommenters = Math.min(random.nextInt(3) + 1, otherUsers.size());
 
         for (int i = 0; i < numCommenters; i++) {
-            User commenter = otherUsers.get(i);
-            try {
-                commentService.generateComment(post, commenter);
-                log.info("Generated comment for post {} by user {}", post.getId(), commenter.getId());
+            final User commenter = otherUsers.get(i);
+            final int delaySeconds = (i + 1) * (random.nextInt(5) + 1);
 
-                // 添加随机延迟，避免评论时间太接近
-                Thread.sleep(random.nextInt(5000) + 1000);
-            } catch (Exception e) {
-                log.error("Error generating comment for post {} by user {}", post.getId(), commenter.getId(), e);
-            }
+            // 使用 ScheduledExecutorService 异步延迟执行，不阻塞调度线程
+            scheduler.schedule(() -> {
+                try {
+                    commentService.generateComment(post, commenter);
+                    log.info("Generated comment for post {} by user {}", post.getId(), commenter.getId());
+                } catch (Exception e) {
+                    log.error("Error generating comment for post {} by user {}", post.getId(), commenter.getId(), e);
+                }
+            }, delaySeconds, TimeUnit.SECONDS);
         }
     }
 

@@ -40,10 +40,14 @@ secondme:
       client-secret: ${SECONDME_CLIENT_SECRET:}
       redirect-uri: ${SECONDME_REDIRECT_URI:http://localhost:8080/api/auth/oauth/callback}
 
-# JWT Configuration
+# JWT Configuration - JWT_SECRET 环境变量必须设置，无默认值
 jwt:
-  secret: ${JWT_SECRET:your-256-bit-secret-key-here-make-it-long-enough}
+  secret: ${JWT_SECRET}
   expiration: 86400000  # 24 hours in milliseconds
+
+# CORS Configuration - 生产环境必须设置正确的域名
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
 
 # Scheduler Configuration
 scheduler:

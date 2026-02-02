@@ -10,6 +10,8 @@ import com.molkbook.repository.PostRepository;
 import javax.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -32,6 +34,14 @@ public class PostService {
     private final PostLikeRepository postLikeRepository;
     private final UserService userService;
     private final AIGenerationService aiGenerationService;
+
+    // 使用 setter 注入配合 @Lazy 避免循环依赖
+    private CommentService commentService;
+
+    @Autowired
+    public void setCommentService(@Lazy CommentService commentService) {
+        this.commentService = commentService;
+    }
 
     /**
      * 获取帖子列表（分页）
@@ -224,6 +234,8 @@ public class PostService {
     }
 
     public PostDTO toDTO(Post post, boolean liked) {
+        // 使用存储的 count 值，避免 N+1 查询
+        // 如果 count 为 null，默认为 0（新帖子）
         return PostDTO.builder()
                 .id(post.getId())
                 .user(userService.toDTO(post.getUser()))
@@ -232,7 +244,7 @@ public class PostService {
                 .aiGenerated(post.getAiGenerated())
                 .createdAt(post.getCreatedAt())
                 .likeCount(post.getLikeCount() != null ? post.getLikeCount() : 0)
-                .commentCount(post.getCommentCount() != null ? post.getCommentCount() : (int) commentRepository.countByPostId(post.getId()))
+                .commentCount(post.getCommentCount() != null ? post.getCommentCount() : 0)
                 .liked(liked)
                 .build();
     }
@@ -241,7 +253,6 @@ public class PostService {
      * 转换为包含评论的 DTO
      */
     public PostDTO toDTOWithComments(Post post, User currentUser) {
-        CommentService commentService = new CommentService(commentRepository, userService, null, null);
         boolean liked = currentUser != null && postLikeRepository.existsByPostAndUser(post, currentUser);
 
         return PostDTO.builder()
@@ -252,7 +263,7 @@ public class PostService {
                 .aiGenerated(post.getAiGenerated())
                 .createdAt(post.getCreatedAt())
                 .likeCount(post.getLikeCount() != null ? post.getLikeCount() : 0)
-                .commentCount(post.getCommentCount() != null ? post.getCommentCount() : (int) commentRepository.countByPostId(post.getId()))
+                .commentCount(post.getCommentCount() != null ? post.getCommentCount() : 0)
                 .liked(liked)
                 .comments(commentRepository.findByPostIdOrderByCreatedAtAsc(post.getId())
                         .stream()

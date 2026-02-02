@@ -23,7 +23,7 @@ public class CommentService {
     private final CommentRepository commentRepository;
     private final UserService userService;
     private final AIGenerationService aiGenerationService;
-    private final PostService postService;
+    // 移除 PostService 依赖，避免循环依赖（PostService -> CommentService -> PostService）
 
     /**
      * 获取帖子的评论（分页）

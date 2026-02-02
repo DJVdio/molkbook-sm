@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS users (
     self_introduction TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE INDEX idx_secondme_token (secondme_token),
     INDEX idx_email (email)
 );
 
@@ -42,6 +43,7 @@ CREATE TABLE IF NOT EXISTS comments (
     FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     INDEX idx_post_id (post_id),
+    INDEX idx_user_id (user_id),
     INDEX idx_created_at (created_at)
 );
 

@@ -1,6 +1,6 @@
 package com.molkbook.controller;
 
-import com.molkbook.config.JwtUtil;
+import com.molkbook.config.AuthHelper;
 import com.molkbook.dto.PostDTO;
 import com.molkbook.entity.Post;
 import com.molkbook.entity.User;
@@ -22,9 +22,11 @@ import java.util.Optional;
 @Slf4j
 public class PostController {
 
+    private static final int MAX_PAGE_SIZE = 100;
+
     private final PostService postService;
     private final UserService userService;
-    private final JwtUtil jwtUtil;
+    private final AuthHelper authHelper;
 
     /**
      * 获取帖子列表
@@ -36,8 +38,11 @@ public class PostController {
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(defaultValue = "newest") String sortBy,
             @RequestHeader(value = "Authorization", required = false) String authHeader) {
-        Long currentUserId = extractUserId(authHeader);
-        return ResponseEntity.ok(postService.getPosts(page, size, sortBy, currentUserId));
+        // 限制分页大小，防止请求过大
+        int safeSize = Math.min(Math.max(1, size), MAX_PAGE_SIZE);
+        int safePage = Math.max(0, page);
+        Long currentUserId = authHelper.extractUserId(authHeader);
+        return ResponseEntity.ok(postService.getPosts(safePage, safeSize, sortBy, currentUserId));
     }
 
     /**
@@ -48,7 +53,9 @@ public class PostController {
             @PathVariable Long userId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(postService.getUserPosts(userId, page, size));
+        int safeSize = Math.min(Math.max(1, size), MAX_PAGE_SIZE);
+        int safePage = Math.max(0, page);
+        return ResponseEntity.ok(postService.getUserPosts(userId, safePage, safeSize));
     }
 
     /**
@@ -58,7 +65,7 @@ public class PostController {
     public ResponseEntity<PostDTO> getPostById(
             @PathVariable Long id,
             @RequestHeader(value = "Authorization", required = false) String authHeader) {
-        Long currentUserId = extractUserId(authHeader);
+        Long currentUserId = authHelper.extractUserId(authHeader);
         User currentUser = currentUserId != null ? userService.findById(currentUserId).orElse(null) : null;
 
         return postService.findById(id)
@@ -74,7 +81,7 @@ public class PostController {
             @PathVariable Long id,
             @RequestHeader("Authorization") String authHeader) {
 
-        Long userId = extractUserId(authHeader);
+        Long userId = authHelper.extractUserId(authHeader);
         if (userId == null) {
             return ResponseEntity.status(401).body(Map.of("error", "Unauthorized"));
         }
@@ -101,7 +108,7 @@ public class PostController {
             @PathVariable Long id,
             @RequestHeader("Authorization") String authHeader) {
 
-        Long userId = extractUserId(authHeader);
+        Long userId = authHelper.extractUserId(authHeader);
         if (userId == null) {
             return ResponseEntity.status(401).body(Map.of("error", "Unauthorized"));
         }
@@ -124,7 +131,7 @@ public class PostController {
     public ResponseEntity<Map<String, Object>> generatePost(
             @RequestHeader("Authorization") String authHeader) {
 
-        Long userId = extractUserId(authHeader);
+        Long userId = authHelper.extractUserId(authHeader);
         if (userId == null) {
             return ResponseEntity.status(401).body(Map.of("error", "Unauthorized"));
         }
@@ -151,19 +158,8 @@ public class PostController {
             log.error("Error generating post", e);
             return ResponseEntity.status(500).body(Map.of(
                     "success", false,
-                    "error", e.getMessage()
+                    "error", "Failed to generate post"
             ));
         }
-    }
-
-    private Long extractUserId(String authHeader) {
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            return null;
-        }
-        String token = authHeader.substring(7);
-        if (!jwtUtil.isTokenValid(token)) {
-            return null;
-        }
-        return jwtUtil.extractUserId(token);
     }
 }
