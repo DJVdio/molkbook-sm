@@ -15,6 +15,14 @@ public interface CommentRepository extends JpaRepository<Comment, Long> {
 
     List<Comment> findByPostIdOrderByCreatedAtAsc(Long postId);
 
+    // 只获取顶级评论（没有父评论的）
+    List<Comment> findByPostIdAndParentIsNullOrderByCreatedAtAsc(Long postId);
+
+    Page<Comment> findByPostIdAndParentIsNullOrderByCreatedAtAsc(Long postId, Pageable pageable);
+
+    // 获取某个评论的回复
+    List<Comment> findByParentIdOrderByCreatedAtAsc(Long parentId);
+
     long countByPostId(Long postId);
 
     long countByUserId(Long userId);

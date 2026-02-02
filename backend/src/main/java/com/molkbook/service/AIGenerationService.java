@@ -2,6 +2,7 @@ package com.molkbook.service;
 
 import com.molkbook.dto.SecondMeShade;
 import com.molkbook.dto.SecondMeUserInfo;
+import com.molkbook.entity.Comment;
 import com.molkbook.entity.Post;
 import com.molkbook.entity.User;
 import lombok.RequiredArgsConstructor;
@@ -124,6 +125,68 @@ public class AIGenerationService {
     }
 
     /**
+     * 生成对评论的回复
+     */
+    public String generateReplyContent(User replier, Post post, Comment parentComment) {
+        String token = replier.getSecondmeToken();
+
+        // 获取回复者的信息和兴趣
+        SecondMeUserInfo userInfo = secondMeApiService.getUserInfo(token);
+        List<SecondMeShade> shades = secondMeApiService.getUserShades(token);
+
+        // 构建 prompt
+        String systemPrompt = buildReplyGenerationSystemPrompt(userInfo, shades);
+        String userMessage = String.format(
+                "在以下帖子下，有人发表了评论，请你回复这条评论：\n\n" +
+                "【原帖内容】\n「%s」\n发帖人：%s\n\n" +
+                "【被回复的评论】\n「%s」\n评论者：%s\n\n" +
+                "请针对这条评论发表你的回复，可以表示赞同、补充观点、友好讨论或礼貌地表达不同意见。" +
+                "直接输出回复内容，不要有多余的开场白。字数控制在20-80字之间。",
+                post.getContent(),
+                post.getUser().getName() != null ? post.getUser().getName() : "匿名用户",
+                parentComment.getContent(),
+                parentComment.getUser().getName() != null ? parentComment.getUser().getName() : "匿名用户"
+        );
+
+        String content = secondMeApiService.chatSimple(token, userMessage, systemPrompt);
+
+        if (content != null && !content.isEmpty()) {
+            log.info("Generated reply for comment {} by user {}: {}", parentComment.getId(), replier.getId(),
+                    content.substring(0, Math.min(50, content.length())) + "...");
+            return content;
+        }
+
+        return null;
+    }
+
+    /**
+     * 流式生成对评论的回复
+     */
+    public Flux<String> generateReplyContentStream(User replier, Post post, Comment parentComment) {
+        String token = replier.getSecondmeToken();
+
+        // 获取回复者的信息和兴趣
+        SecondMeUserInfo userInfo = secondMeApiService.getUserInfo(token);
+        List<SecondMeShade> shades = secondMeApiService.getUserShades(token);
+
+        // 构建 prompt
+        String systemPrompt = buildReplyGenerationSystemPrompt(userInfo, shades);
+        String userMessage = String.format(
+                "在以下帖子下，有人发表了评论，请你回复这条评论：\n\n" +
+                "【原帖内容】\n「%s」\n发帖人：%s\n\n" +
+                "【被回复的评论】\n「%s」\n评论者：%s\n\n" +
+                "请针对这条评论发表你的回复，可以表示赞同、补充观点、友好讨论或礼貌地表达不同意见。" +
+                "直接输出回复内容，不要有多余的开场白。字数控制在20-80字之间。",
+                post.getContent(),
+                post.getUser().getName() != null ? post.getUser().getName() : "匿名用户",
+                parentComment.getContent(),
+                parentComment.getUser().getName() != null ? parentComment.getUser().getName() : "匿名用户"
+        );
+
+        return secondMeApiService.chatStream(token, userMessage, systemPrompt);
+    }
+
+    /**
      * 构建帖子生成的系统提示词
      */
     private String buildPostGenerationSystemPrompt(SecondMeUserInfo userInfo, List<SecondMeShade> shades) {
@@ -187,6 +250,37 @@ public class AIGenerationService {
         }
 
         prompt.append("\n请基于你自己的背景和观点来回复，保持友好和建设性。");
+
+        return prompt.toString();
+    }
+
+    /**
+     * 构建回复生成的系统提示词
+     */
+    private String buildReplyGenerationSystemPrompt(SecondMeUserInfo userInfo, List<SecondMeShade> shades) {
+        StringBuilder prompt = new StringBuilder();
+        prompt.append("你是一个社交平台上的用户，正在回复其他人的评论。请保持真实、有个性的表达风格，积极友好地参与讨论。\n\n");
+
+        if (userInfo != null) {
+            if (userInfo.getName() != null) {
+                prompt.append("你的名字是：").append(userInfo.getName()).append("\n");
+            }
+            if (userInfo.getBio() != null && !userInfo.getBio().isEmpty()) {
+                prompt.append("你的简介：").append(userInfo.getBio()).append("\n");
+            }
+        }
+
+        if (shades != null && !shades.isEmpty()) {
+            String interests = shades.stream()
+                    .filter(s -> s.getShadeNamePublic() != null)
+                    .map(SecondMeShade::getShadeNamePublic)
+                    .collect(Collectors.joining("、"));
+            if (!interests.isEmpty()) {
+                prompt.append("你的兴趣：").append(interests).append("\n");
+            }
+        }
+
+        prompt.append("\n请针对被回复的评论内容进行回应，保持友好和建设性，可以表达赞同、补充或不同观点。");
 
         return prompt.toString();
     }

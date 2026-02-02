@@ -18,6 +18,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("SELECT u FROM User u WHERE u.id != :excludeUserId ORDER BY FUNCTION('RAND')")
     List<User> findRandomUsersExcluding(Long excludeUserId);
 
+    @Query("SELECT u FROM User u WHERE u.id NOT IN :excludeUserIds ORDER BY FUNCTION('RAND')")
+    List<User> findRandomUsersExcludingMultiple(List<Long> excludeUserIds);
+
     @Query("SELECT u FROM User u ORDER BY u.updatedAt DESC")
     List<User> findActiveUsers();
 }

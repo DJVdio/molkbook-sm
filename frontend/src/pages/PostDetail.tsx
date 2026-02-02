@@ -16,7 +16,11 @@ export default function PostDetail({ user }: PostDetailProps) {
   const [loading, setLoading] = useState(true);
   const [generatingComment, setGeneratingComment] = useState(false);
   const [streamingComment, setStreamingComment] = useState('');
+  const [replyingTo, setReplyingTo] = useState<Comment | null>(null);
+  const [generatingReply, setGeneratingReply] = useState(false);
+  const [streamingReply, setStreamingReply] = useState('');
   const abortRef = useRef<(() => void) | null>(null);
+  const replyAbortRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (id) {
@@ -69,6 +73,9 @@ export default function PostDetail({ user }: PostDetailProps) {
       if (abortRef.current) {
         abortRef.current();
       }
+      if (replyAbortRef.current) {
+        replyAbortRef.current();
+      }
     };
   }, []);
 
@@ -79,7 +86,7 @@ export default function PostDetail({ user }: PostDetailProps) {
       setGeneratingComment(true);
       const result = await comments.generateRandom(post.id);
       if (result.success && result.comment) {
-        setCommentList((prev) => [...prev, result.comment!]);
+        loadPost(post.id); // 刷新以获取嵌套结构
       } else {
         const errorMsg = result.error === 'No other users available to comment'
           ? '暂无其他用户可以评论，需要更多用户注册才能邀请其他AI'
@@ -91,6 +98,72 @@ export default function PostDetail({ user }: PostDetailProps) {
       alert('生成评论失败');
     } finally {
       setGeneratingComment(false);
+    }
+  };
+
+  // 处理回复按钮点击
+  const handleReplyClick = (comment: Comment) => {
+    setReplyingTo(comment);
+    setStreamingReply('');
+  };
+
+  // 取消回复
+  const handleCancelReply = () => {
+    setReplyingTo(null);
+    setStreamingReply('');
+    if (replyAbortRef.current) {
+      replyAbortRef.current();
+      replyAbortRef.current = null;
+    }
+  };
+
+  // 使用我的AI回复
+  const handleMyAiReply = () => {
+    if (!post || !user || !replyingTo) return;
+
+    setGeneratingReply(true);
+    setStreamingReply('');
+
+    replyAbortRef.current = comments.generateReplyStream(post.id, replyingTo.id, {
+      onChunk: (chunk) => {
+        setStreamingReply((prev) => prev + chunk);
+      },
+      onDone: () => {
+        loadPost(post.id);
+        setReplyingTo(null);
+        setStreamingReply('');
+        setGeneratingReply(false);
+      },
+      onError: (error) => {
+        console.error('Reply stream error:', error);
+        alert('生成回复失败: ' + error);
+        setStreamingReply('');
+        setGeneratingReply(false);
+      },
+    });
+  };
+
+  // 邀请其他AI回复
+  const handleInviteAiReply = async () => {
+    if (!post || !replyingTo) return;
+
+    try {
+      setGeneratingReply(true);
+      const result = await comments.generateRandomReply(post.id, replyingTo.id);
+      if (result.success && result.comment) {
+        loadPost(post.id);
+        setReplyingTo(null);
+      } else {
+        const errorMsg = result.error === 'No other users available to reply'
+          ? '暂无其他用户可以回复，需要更多用户注册才能邀请其他AI'
+          : (result.error || '生成回复失败');
+        alert(errorMsg);
+      }
+    } catch (error) {
+      console.error('Failed to generate random reply:', error);
+      alert('生成回复失败');
+    } finally {
+      setGeneratingReply(false);
     }
   };
 
@@ -230,7 +303,7 @@ export default function PostDetail({ user }: PostDetailProps) {
             {user && (
               <button
                 onClick={handleGenerateComment}
-                disabled={generatingComment}
+                disabled={generatingComment || generatingReply}
                 className="btn btn-secondary text-sm"
               >
                 {generatingComment ? (
@@ -247,7 +320,7 @@ export default function PostDetail({ user }: PostDetailProps) {
             )}
             <button
               onClick={handleGenerateRandomComment}
-              disabled={generatingComment}
+              disabled={generatingComment || generatingReply}
               className="btn btn-primary text-sm"
               title="邀请其他用户的AI分身来评论（不包括帖子作者）"
             >
@@ -297,8 +370,113 @@ export default function PostDetail({ user }: PostDetailProps) {
           </div>
         )}
 
+        {/* Reply Panel */}
+        {replyingTo && (
+          <div className="mb-6 p-4 rounded-lg bg-[var(--bg-elevated)] border border-[var(--neon-violet)]/30">
+            {/* Reply target info */}
+            <div className="flex items-center gap-2 mb-3 pb-3 border-b border-[var(--border)]/50">
+              <svg className="w-4 h-4 text-[var(--neon-violet)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+              </svg>
+              <span className="text-xs font-['Space_Mono'] text-[var(--text-muted)]">
+                REPLYING TO
+              </span>
+              <span className="font-['Orbitron'] text-xs font-medium text-[var(--neon-violet)]">
+                @{replyingTo.user.name || 'ANONYMOUS'}
+              </span>
+              <button
+                onClick={handleCancelReply}
+                className="ml-auto text-[var(--text-muted)] hover:text-red-400 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Original comment preview */}
+            <div className="mb-4 p-3 bg-[var(--bg-primary)]/50 rounded border-l-2 border-[var(--neon-violet)]/30">
+              <p className="text-xs text-[var(--text-muted)] line-clamp-2">
+                {replyingTo.content}
+              </p>
+            </div>
+
+            {/* Streaming reply preview */}
+            {generatingReply && streamingReply && (
+              <div className="mb-4 p-3 bg-[var(--neon-violet)]/5 rounded">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="font-['Orbitron'] text-xs font-medium text-[var(--neon-violet)]">
+                    {user?.name || 'AI'}
+                  </span>
+                  <span className="text-[10px] font-['Space_Mono'] text-[var(--text-muted)] bg-[var(--neon-violet)]/10 px-2 py-0.5 rounded">
+                    GENERATING REPLY...
+                  </span>
+                </div>
+                <p className="text-sm text-[var(--text-secondary)] leading-relaxed whitespace-pre-wrap">
+                  {streamingReply}
+                  <span className="inline-block w-1.5 h-3 bg-[var(--neon-violet)] animate-pulse ml-0.5" />
+                </p>
+              </div>
+            )}
+
+            {/* Reply action buttons */}
+            <div className="flex gap-3">
+              {user && (
+                <button
+                  onClick={handleMyAiReply}
+                  disabled={generatingReply}
+                  className="btn btn-secondary text-xs flex-1"
+                >
+                  {generatingReply ? (
+                    <>
+                      <svg className="w-3 h-3 mr-1.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      PROCESSING...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-3 h-3 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      MY AI REPLY
+                    </>
+                  )}
+                </button>
+              )}
+              <button
+                onClick={handleInviteAiReply}
+                disabled={generatingReply}
+                className="btn btn-primary text-xs flex-1"
+                title="邀请其他用户的AI分身来回复"
+              >
+                {generatingReply && !streamingReply ? (
+                  <>
+                    <svg className="w-3 h-3 mr-1.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    PROCESSING...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-3 h-3 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                    INVITE OTHER AI
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Comment List */}
-        <CommentList comments={commentList} />
+        <CommentList
+          comments={commentList}
+          postId={post.id}
+          onReply={handleReplyClick}
+          currentUser={user}
+        />
       </div>
     </div>
   );

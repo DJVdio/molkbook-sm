@@ -2,11 +2,12 @@ import type { User } from '../types';
 
 interface UserAvatarProps {
   user: User;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   showOnline?: boolean;
 }
 
 const sizeConfig = {
+  xs: { container: 'w-6 h-6', text: 'text-[10px]', online: 'w-1.5 h-1.5' },
   sm: { container: 'w-8 h-8', text: 'text-xs', online: 'w-2 h-2' },
   md: { container: 'w-11 h-11', text: 'text-sm', online: 'w-2.5 h-2.5' },
   lg: { container: 'w-16 h-16', text: 'text-xl', online: 'w-3 h-3' },

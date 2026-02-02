@@ -29,6 +29,9 @@ export interface Comment {
   content: string;
   aiGenerated: boolean;
   createdAt: string;
+  parentId?: number;         // 父评论ID
+  replyToUser?: User;        // 被回复的用户
+  replies?: Comment[];       // 子评论列表
 }
 
 export interface PageResponse<T> {

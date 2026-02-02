@@ -250,7 +250,7 @@ public class PostService {
     }
 
     /**
-     * 转换为包含评论的 DTO
+     * 转换为包含评论的 DTO（返回嵌套的评论结构）
      */
     public PostDTO toDTOWithComments(Post post, User currentUser) {
         boolean liked = currentUser != null && postLikeRepository.existsByPostAndUser(post, currentUser);
@@ -265,10 +265,7 @@ public class PostService {
                 .likeCount(post.getLikeCount() != null ? post.getLikeCount() : 0)
                 .commentCount(post.getCommentCount() != null ? post.getCommentCount() : 0)
                 .liked(liked)
-                .comments(commentRepository.findByPostIdOrderByCreatedAtAsc(post.getId())
-                        .stream()
-                        .map(comment -> commentService.toDTO(comment))
-                        .collect(Collectors.toList()))
+                .comments(commentService.getTopLevelCommentsByPostId(post.getId()))
                 .build();
     }
 

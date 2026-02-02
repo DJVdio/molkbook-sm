@@ -15,6 +15,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 @Slf4j
@@ -27,23 +29,38 @@ public class CommentService {
     private final AIGenerationService aiGenerationService;
 
     /**
-     * 获取帖子的评论（分页）
+     * 获取帖子的评论（分页）- 只返回顶级评论，带嵌套回复
      */
     public Page<CommentDTO> getCommentsByPostId(Long postId, int page, int size) {
         Pageable pageable = PageRequest.of(page, size);
-        Page<Comment> comments = commentRepository.findByPostIdOrderByCreatedAtAsc(postId, pageable);
-        return comments.map(this::toDTO);
+        Page<Comment> comments = commentRepository.findByPostIdAndParentIsNullOrderByCreatedAtAsc(postId, pageable);
+        return comments.map(this::toDTOWithReplies);
     }
 
     /**
-     * 获取帖子的所有评论
+     * 获取帖子的所有顶级评论（带嵌套回复）
+     */
+    public List<CommentDTO> getTopLevelCommentsByPostId(Long postId) {
+        List<Comment> comments = commentRepository.findByPostIdAndParentIsNullOrderByCreatedAtAsc(postId);
+        return comments.stream().map(this::toDTOWithReplies).collect(Collectors.toList());
+    }
+
+    /**
+     * 获取帖子的所有评论（扁平结构）
      */
     public List<Comment> getCommentsByPostId(Long postId) {
         return commentRepository.findByPostIdOrderByCreatedAtAsc(postId);
     }
 
     /**
-     * 创建评论
+     * 根据ID获取评论
+     */
+    public Optional<Comment> findById(Long commentId) {
+        return commentRepository.findById(commentId);
+    }
+
+    /**
+     * 创建顶级评论
      */
     @Transactional
     public Comment createComment(Post post, User user, String content) {
@@ -63,6 +80,27 @@ public class CommentService {
     }
 
     /**
+     * 创建回复评论
+     */
+    @Transactional
+    public Comment createReply(Post post, User user, String content, Comment parentComment) {
+        Comment reply = Comment.builder()
+                .post(post)
+                .user(user)
+                .content(content)
+                .parent(parentComment)
+                .aiGenerated(true)
+                .build();
+        Comment savedReply = commentRepository.save(reply);
+
+        // 更新帖子的评论数
+        post.setCommentCount((post.getCommentCount() != null ? post.getCommentCount() : 0) + 1);
+        postRepository.save(post);
+
+        return savedReply;
+    }
+
+    /**
      * AI 生成评论
      */
     @Transactional
@@ -75,15 +113,51 @@ public class CommentService {
     }
 
     /**
-     * 转换为 DTO
+     * AI 生成回复
+     */
+    @Transactional
+    public Comment generateReply(Post post, User replier, Comment parentComment) {
+        String content = aiGenerationService.generateReplyContent(replier, post, parentComment);
+        if (content != null && !content.isEmpty()) {
+            return createReply(post, replier, content, parentComment);
+        }
+        return null;
+    }
+
+    /**
+     * 转换为 DTO（不含子评论）
      */
     public CommentDTO toDTO(Comment comment) {
-        return CommentDTO.builder()
+        CommentDTO.CommentDTOBuilder builder = CommentDTO.builder()
                 .id(comment.getId())
                 .user(userService.toDTO(comment.getUser()))
                 .content(comment.getContent())
                 .aiGenerated(comment.getAiGenerated())
-                .createdAt(comment.getCreatedAt())
-                .build();
+                .createdAt(comment.getCreatedAt());
+
+        // 如果有父评论，设置父评论ID和被回复的用户
+        if (comment.getParent() != null) {
+            builder.parentId(comment.getParent().getId());
+            builder.replyToUser(userService.toDTO(comment.getParent().getUser()));
+        }
+
+        return builder.build();
+    }
+
+    /**
+     * 转换为 DTO（包含子评论）
+     */
+    public CommentDTO toDTOWithReplies(Comment comment) {
+        CommentDTO dto = toDTO(comment);
+
+        // 获取并转换子评论
+        List<Comment> replies = commentRepository.findByParentIdOrderByCreatedAtAsc(comment.getId());
+        if (!replies.isEmpty()) {
+            dto.setReplies(replies.stream()
+                    .map(this::toDTOWithReplies)  // 递归支持多层嵌套
+                    .collect(Collectors.toList()));
+        }
+
+        return dto;
     }
 }
