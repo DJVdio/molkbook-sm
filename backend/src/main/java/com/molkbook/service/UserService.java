@@ -29,10 +29,23 @@ public class UserService {
     private final SecondMeApiService secondMeApiService;
 
     /**
-     * 根据 SecondMe Token 创建或更新用户
+     * 创建或更新用户的结果
+     */
+    public static class CreateUserResult {
+        public User user;
+        public boolean isNewUser;
+
+        public CreateUserResult(User user, boolean isNewUser) {
+            this.user = user;
+            this.isNewUser = isNewUser;
+        }
+    }
+
+    /**
+     * 根据 SecondMe Token 创建或更新用户（返回是否为新用户）
      */
     @Transactional
-    public User createOrUpdateUser(String secondmeToken) {
+    public CreateUserResult createOrUpdateUserWithFlag(String secondmeToken) {
         // 获取 SecondMe 用户信息
         SecondMeUserInfo userInfo = secondMeApiService.getUserInfo(secondmeToken);
         if (userInfo == null) {
@@ -42,12 +55,14 @@ public class UserService {
         // 查找或创建用户
         Optional<User> existingUser = userRepository.findBySecondmeToken(secondmeToken);
         User user;
+        boolean isNewUser = false;
 
         if (existingUser.isPresent()) {
             user = existingUser.get();
         } else {
             user = new User();
             user.setSecondmeToken(secondmeToken);
+            isNewUser = true;
         }
 
         // 更新用户信息
@@ -62,7 +77,15 @@ public class UserService {
         // 同步用户兴趣标签
         syncUserShades(user, secondmeToken);
 
-        return user;
+        return new CreateUserResult(user, isNewUser);
+    }
+
+    /**
+     * 根据 SecondMe Token 创建或更新用户（兼容旧接口）
+     */
+    @Transactional
+    public User createOrUpdateUser(String secondmeToken) {
+        return createOrUpdateUserWithFlag(secondmeToken).user;
     }
 
     /**

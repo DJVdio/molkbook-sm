@@ -26,4 +26,14 @@ public interface PostRepository extends JpaRepository<Post, Long> {
     List<Post> findRecentPosts(Pageable pageable);
 
     long countByUserId(Long userId);
+
+    // 按点赞数排序
+    Page<Post> findAllByOrderByLikeCountDesc(Pageable pageable);
+
+    // 按评论数排序
+    Page<Post> findAllByOrderByCommentCountDesc(Pageable pageable);
+
+    // 综合热度排序（点赞数 + 评论数）
+    @Query("SELECT p FROM Post p ORDER BY (p.likeCount + p.commentCount) DESC, p.createdAt DESC")
+    Page<Post> findAllByHotness(Pageable pageable);
 }

@@ -1,11 +1,18 @@
 import { useState, useEffect } from 'react';
 import type { Post, User } from '../types';
-import { posts } from '../services/api';
+import { posts, SortBy } from '../services/api';
 import PostCard from '../components/PostCard';
 
 interface HomeProps {
   user: User | null;
 }
+
+const SORT_OPTIONS: { value: SortBy; label: string; icon: string }[] = [
+  { value: 'newest', label: 'LATEST', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
+  { value: 'hot', label: 'HOT', icon: 'M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z' },
+  { value: 'likes', label: 'TOP LIKED', icon: 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z' },
+  { value: 'comments', label: 'MOST DISCUSSED', icon: 'M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z' },
+];
 
 export default function Home({ user }: HomeProps) {
   const [postList, setPostList] = useState<Post[]>([]);
@@ -13,15 +20,16 @@ export default function Home({ user }: HomeProps) {
   const [generating, setGenerating] = useState(false);
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
+  const [sortBy, setSortBy] = useState<SortBy>('newest');
 
   useEffect(() => {
-    loadPosts();
-  }, []);
+    loadPosts(0, sortBy);
+  }, [sortBy]);
 
-  const loadPosts = async (pageNum = 0) => {
+  const loadPosts = async (pageNum = 0, sort: SortBy = sortBy) => {
     try {
       setLoading(true);
-      const result = await posts.getList(pageNum, 20);
+      const result = await posts.getList(pageNum, 20, sort);
       if (pageNum === 0) {
         setPostList(result.content);
       } else {
@@ -33,6 +41,13 @@ export default function Home({ user }: HomeProps) {
       console.error('Failed to load posts:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSortChange = (newSort: SortBy) => {
+    if (newSort !== sortBy) {
+      setSortBy(newSort);
+      setPage(0);
     }
   };
 
@@ -108,8 +123,30 @@ export default function Home({ user }: HomeProps) {
           )}
         </div>
 
+        {/* Sort Tabs */}
+        <div className="relative mt-6 pt-4 border-t border-[var(--border)]">
+          <div className="flex items-center gap-1 overflow-x-auto pb-2 -mb-2 scrollbar-hide">
+            {SORT_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                onClick={() => handleSortChange(option.value)}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-['Orbitron'] tracking-wider whitespace-nowrap transition-all duration-200 ${
+                  sortBy === option.value
+                    ? 'bg-gradient-to-r from-[var(--neon-cyan)]/20 to-[var(--neon-violet)]/20 text-[var(--neon-cyan)] border border-[var(--neon-cyan)]/30'
+                    : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]'
+                }`}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={option.icon} />
+                </svg>
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Stats bar */}
-        <div className="relative mt-6 pt-4 border-t border-[var(--border)] flex items-center gap-6">
+        <div className="relative mt-4 flex items-center gap-6">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-[var(--neon-cyan)] animate-pulse" />
             <span className="text-xs font-['Space_Mono'] text-[var(--text-muted)]">
@@ -169,7 +206,7 @@ export default function Home({ user }: HomeProps) {
               className="fade-in"
               style={{ animationDelay: `${index * 0.05}s` }}
             >
-              <PostCard post={post} />
+              <PostCard post={post} isAuthenticated={!!user} />
             </div>
           ))}
 

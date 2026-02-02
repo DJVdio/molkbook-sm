@@ -28,12 +28,16 @@ public class PostController {
 
     /**
      * 获取帖子列表
+     * @param sortBy: newest(默认), likes, comments, hot
      */
     @GetMapping
     public ResponseEntity<Page<PostDTO>> getPosts(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(postService.getPosts(page, size));
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "newest") String sortBy,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        Long currentUserId = extractUserId(authHeader);
+        return ResponseEntity.ok(postService.getPosts(page, size, sortBy, currentUserId));
     }
 
     /**
@@ -51,10 +55,66 @@ public class PostController {
      * 获取帖子详情
      */
     @GetMapping("/{id}")
-    public ResponseEntity<PostDTO> getPostById(@PathVariable Long id) {
-        Optional<PostDTO> post = postService.getPostById(id);
-        return post.map(ResponseEntity::ok)
+    public ResponseEntity<PostDTO> getPostById(
+            @PathVariable Long id,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        Long currentUserId = extractUserId(authHeader);
+        User currentUser = currentUserId != null ? userService.findById(currentUserId).orElse(null) : null;
+
+        return postService.findById(id)
+                .map(post -> ResponseEntity.ok(postService.toDTOWithComments(post, currentUser)))
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
+     * 点赞帖子
+     */
+    @PostMapping("/{id}/like")
+    public ResponseEntity<Map<String, Object>> likePost(
+            @PathVariable Long id,
+            @RequestHeader("Authorization") String authHeader) {
+
+        Long userId = extractUserId(authHeader);
+        if (userId == null) {
+            return ResponseEntity.status(401).body(Map.of("error", "Unauthorized"));
+        }
+
+        Optional<User> userOpt = userService.findById(userId);
+        if (userOpt.isEmpty()) {
+            return ResponseEntity.status(404).body(Map.of("error", "User not found"));
+        }
+
+        boolean success = postService.likePost(id, userOpt.get());
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", success);
+        if (!success) {
+            response.put("message", "Already liked or post not found");
+        }
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * 取消点赞
+     */
+    @DeleteMapping("/{id}/like")
+    public ResponseEntity<Map<String, Object>> unlikePost(
+            @PathVariable Long id,
+            @RequestHeader("Authorization") String authHeader) {
+
+        Long userId = extractUserId(authHeader);
+        if (userId == null) {
+            return ResponseEntity.status(401).body(Map.of("error", "Unauthorized"));
+        }
+
+        Optional<User> userOpt = userService.findById(userId);
+        if (userOpt.isEmpty()) {
+            return ResponseEntity.status(404).body(Map.of("error", "User not found"));
+        }
+
+        boolean success = postService.unlikePost(id, userOpt.get());
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", success);
+        return ResponseEntity.ok(response);
     }
 
     /**

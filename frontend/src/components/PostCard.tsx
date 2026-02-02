@@ -1,12 +1,20 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Post } from '../types';
 import UserAvatar from './UserAvatar';
+import { posts as postsApi } from '../services/api';
 
 interface PostCardProps {
   post: Post;
+  isAuthenticated?: boolean;
+  onLikeChange?: (postId: number, liked: boolean, newLikeCount: number) => void;
 }
 
-export default function PostCard({ post }: PostCardProps) {
+export default function PostCard({ post, isAuthenticated = false, onLikeChange }: PostCardProps) {
+  const [liked, setLiked] = useState(post.liked || false);
+  const [likeCount, setLikeCount] = useState(post.likeCount || 0);
+  const [isLiking, setIsLiking] = useState(false);
+
   const formatTime = (dateStr: string) => {
     const date = new Date(dateStr);
     const now = new Date();
@@ -21,6 +29,32 @@ export default function PostCard({ post }: PostCardProps) {
     if (hours < 24) return `${hours}h`;
     if (days < 7) return `${days}d`;
     return date.toLocaleDateString('zh-CN');
+  };
+
+  const handleLike = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!isAuthenticated || isLiking) return;
+
+    setIsLiking(true);
+    try {
+      if (liked) {
+        await postsApi.unlike(post.id);
+        setLiked(false);
+        setLikeCount(prev => Math.max(0, prev - 1));
+        onLikeChange?.(post.id, false, likeCount - 1);
+      } else {
+        await postsApi.like(post.id);
+        setLiked(true);
+        setLikeCount(prev => prev + 1);
+        onLikeChange?.(post.id, true, likeCount + 1);
+      }
+    } catch (error) {
+      console.error('Failed to toggle like:', error);
+    } finally {
+      setIsLiking(false);
+    }
   };
 
   return (
@@ -77,15 +111,44 @@ export default function PostCard({ post }: PostCardProps) {
 
       {/* Footer */}
       <div className="mt-5 pt-4 border-t border-[var(--border)] flex items-center justify-between">
-        <Link
-          to={`/post/${post.id}`}
-          className="flex items-center gap-2 text-xs font-['Orbitron'] tracking-wider text-[var(--text-muted)] hover:text-[var(--neon-cyan)] transition-colors"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-          </svg>
-          <span>{post.commentCount} REPLIES</span>
-        </Link>
+        <div className="flex items-center gap-4">
+          {/* Like button */}
+          <button
+            onClick={handleLike}
+            disabled={!isAuthenticated || isLiking}
+            className={`flex items-center gap-2 text-xs font-['Orbitron'] tracking-wider transition-all duration-200 ${
+              liked
+                ? 'text-[var(--neon-pink)]'
+                : 'text-[var(--text-muted)] hover:text-[var(--neon-pink)]'
+            } ${!isAuthenticated ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+          >
+            <svg
+              className={`w-4 h-4 transition-transform ${isLiking ? 'animate-pulse' : ''} ${liked ? 'scale-110' : ''}`}
+              fill={liked ? 'currentColor' : 'none'}
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+              />
+            </svg>
+            <span>{likeCount}</span>
+          </button>
+
+          {/* Comments */}
+          <Link
+            to={`/post/${post.id}`}
+            className="flex items-center gap-2 text-xs font-['Orbitron'] tracking-wider text-[var(--text-muted)] hover:text-[var(--neon-cyan)] transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+            <span>{post.commentCount}</span>
+          </Link>
+        </div>
 
         <Link
           to={`/post/${post.id}`}

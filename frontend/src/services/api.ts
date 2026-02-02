@@ -57,9 +57,11 @@ export const users = {
 };
 
 // 帖子相关
+export type SortBy = 'newest' | 'likes' | 'comments' | 'hot';
+
 export const posts = {
-  getList: (page = 0, size = 20) =>
-    request<PageResponse<Post>>(`/posts?page=${page}&size=${size}`),
+  getList: (page = 0, size = 20, sortBy: SortBy = 'newest') =>
+    request<PageResponse<Post>>(`/posts?page=${page}&size=${size}&sortBy=${sortBy}`),
 
   getById: (id: number) => request<Post>(`/posts/${id}`),
 
@@ -69,6 +71,16 @@ export const posts = {
   generate: () =>
     request<{ success: boolean; post?: Post; error?: string }>('/posts/generate', {
       method: 'POST',
+    }),
+
+  like: (postId: number) =>
+    request<{ success: boolean; message?: string }>(`/posts/${postId}/like`, {
+      method: 'POST',
+    }),
+
+  unlike: (postId: number) =>
+    request<{ success: boolean }>(`/posts/${postId}/like`, {
+      method: 'DELETE',
     }),
 };
 

@@ -2,6 +2,7 @@ package com.molkbook.controller;
 
 import com.molkbook.config.JwtUtil;
 import com.molkbook.entity.User;
+import com.molkbook.service.PostService;
 import com.molkbook.service.SecondMeApiService;
 import com.molkbook.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +23,7 @@ import java.util.Map;
 public class AuthController {
 
     private final UserService userService;
+    private final PostService postService;
     private final SecondMeApiService secondMeApiService;
     private final JwtUtil jwtUtil;
 
@@ -84,16 +86,30 @@ public class AuthController {
                 return ResponseEntity.badRequest().body(response);
             }
 
-            // 创建或更新用户
-            User user = userService.createOrUpdateUser(accessToken);
+            // 创建或更新用户（返回是否为新用户）
+            UserService.CreateUserResult result = userService.createOrUpdateUserWithFlag(accessToken);
+            User user = result.user;
+            boolean isNewUser = result.isNewUser;
 
             // 生成 JWT
             String jwt = jwtUtil.generateToken(user.getId());
+
+            // 如果是新用户，自动生成一个欢迎帖子
+            if (isNewUser) {
+                try {
+                    log.info("New user registered: {}, generating welcome post", user.getName());
+                    postService.generatePost(user);
+                } catch (Exception e) {
+                    log.warn("Failed to generate welcome post for new user: {}", e.getMessage());
+                    // 不影响登录流程
+                }
+            }
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("token", jwt);
             response.put("user", userService.toDTO(user));
+            response.put("isNewUser", isNewUser);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             log.error("OAuth callback error", e);
