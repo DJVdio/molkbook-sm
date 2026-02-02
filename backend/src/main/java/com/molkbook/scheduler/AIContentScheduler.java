@@ -113,6 +113,7 @@ public class AIContentScheduler {
     /**
      * 定时为最近的帖子生成评论
      * 每小时的第30分钟执行
+     * 随机 20% 的用户到随机 20% 的帖子里回复（平均一个帖子一个回复）
      */
     @Scheduled(cron = "${scheduler.comment-generation.cron:0 30 * * * *}")
     public void generateCommentsForRecentPosts() {
@@ -124,17 +125,56 @@ public class AIContentScheduler {
         log.info("Starting scheduled comment generation...");
 
         // 获取最近的帖子
-        List<Post> recentPosts = postService.getRecentPosts(10);
+        List<Post> recentPosts = postService.getRecentPosts(20);
         if (recentPosts.isEmpty()) {
             log.info("No recent posts found for comment generation");
             return;
         }
 
-        // 随机选择一个帖子
-        Post selectedPost = recentPosts.get(random.nextInt(recentPosts.size()));
+        // 获取所有用户
+        List<User> allUsers = userService.findActiveUsers();
+        if (allUsers.isEmpty()) {
+            log.info("No users found for comment generation");
+            return;
+        }
 
-        // 为该帖子生成评论
-        triggerAutoComments(selectedPost);
+        // 随机选择 20% 的帖子（至少 1 个）
+        int numPosts = Math.max(1, (int) Math.ceil(recentPosts.size() * 0.2));
+        java.util.Collections.shuffle(recentPosts);
+        List<Post> selectedPosts = recentPosts.subList(0, Math.min(numPosts, recentPosts.size()));
+
+        // 随机选择 20% 的用户（至少 1 个）
+        int numUsers = Math.max(1, (int) Math.ceil(allUsers.size() * 0.2));
+        java.util.Collections.shuffle(allUsers);
+        List<User> selectedUsers = allUsers.subList(0, Math.min(numUsers, allUsers.size()));
+
+        log.info("Will generate comments: {} users to {} posts", selectedUsers.size(), selectedPosts.size());
+
+        // 每个用户评论一个随机帖子（排除自己的帖子）
+        int taskIndex = 0;
+        for (User user : selectedUsers) {
+            // 找一个不是自己发的帖子
+            List<Post> availablePosts = selectedPosts.stream()
+                    .filter(p -> !p.getUser().getId().equals(user.getId()))
+                    .collect(java.util.stream.Collectors.toList());
+
+            if (availablePosts.isEmpty()) {
+                continue;
+            }
+
+            Post targetPost = availablePosts.get(random.nextInt(availablePosts.size()));
+            final int delaySeconds = taskIndex * 10; // 间隔 10 秒
+            taskIndex++;
+
+            scheduler.schedule(() -> {
+                try {
+                    commentService.generateComment(targetPost, user);
+                    log.info("Generated comment for post {} by user {}", targetPost.getId(), user.getId());
+                } catch (Exception e) {
+                    log.error("Error generating comment for post {} by user {}", targetPost.getId(), user.getId(), e);
+                }
+            }, delaySeconds, TimeUnit.SECONDS);
+        }
     }
 
     /**
