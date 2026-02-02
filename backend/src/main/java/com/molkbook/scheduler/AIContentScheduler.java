@@ -76,10 +76,6 @@ public class AIContentScheduler {
                     Post post = postService.generatePost(user);
                     if (post != null) {
                         log.info("Generated post {} for user {}", post.getId(), user.getId());
-
-                        // 触发自动点赞和评论
-                        triggerAutoLikes(post);
-                        triggerAutoComments(post);
                     }
                 } catch (Exception e) {
                     log.error("Error generating post for user {}", user.getId(), e);
