@@ -84,6 +84,11 @@ public class CommentService {
      */
     @Transactional
     public Comment createReply(Post post, User user, String content, Comment parentComment) {
+        // 验证父评论属于同一帖子
+        if (!parentComment.getPost().getId().equals(post.getId())) {
+            throw new IllegalArgumentException("Parent comment does not belong to the specified post");
+        }
+
         Comment reply = Comment.builder()
                 .post(post)
                 .user(user)
@@ -148,13 +153,27 @@ public class CommentService {
      * 转换为 DTO（包含子评论）
      */
     public CommentDTO toDTOWithReplies(Comment comment) {
+        return toDTOWithReplies(comment, 0);
+    }
+
+    private static final int MAX_REPLY_DEPTH = 5;  // 最大嵌套深度
+
+    /**
+     * 转换为 DTO（包含子评论，带深度限制）
+     */
+    private CommentDTO toDTOWithReplies(Comment comment, int depth) {
         CommentDTO dto = toDTO(comment);
+
+        // 超过最大深度则不再获取子评论
+        if (depth >= MAX_REPLY_DEPTH) {
+            return dto;
+        }
 
         // 获取并转换子评论
         List<Comment> replies = commentRepository.findByParentIdOrderByCreatedAtAsc(comment.getId());
         if (!replies.isEmpty()) {
             dto.setReplies(replies.stream()
-                    .map(this::toDTOWithReplies)  // 递归支持多层嵌套
+                    .map(reply -> toDTOWithReplies(reply, depth + 1))
                     .collect(Collectors.toList()));
         }
 
