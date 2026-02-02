@@ -168,8 +168,9 @@ public class PostController {
     }
 
     /**
-     * AI 流式生成帖子内容
+     * AI 流式生成帖子内容（仅预览，不保存）
      * 返回 SSE 流，前端可以实时显示生成内容
+     * 用户需要调用 /create 接口来实际发布帖子
      */
     @PostMapping(value = "/generate/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<String> generatePostStream(
@@ -194,21 +195,14 @@ public class PostController {
                     return "data: " + chunk.replace("\n", "\\n") + "\n\n";
                 })
                 .concatWith(Flux.defer(() -> {
-                    // 流结束后，保存帖子并返回完整信息
+                    // 流结束后，只返回完整内容，不保存
                     String content = contentBuilder.toString();
                     if (!content.isEmpty()) {
-                        try {
-                            Post post = postService.createPost(user, content, null);
-                            String postJson = String.format(
-                                    "{\"id\":%d,\"content\":\"%s\"}",
-                                    post.getId(),
-                                    content.replace("\"", "\\\"").replace("\n", "\\n")
-                            );
-                            return Flux.just("event: done\ndata: " + postJson + "\n\n");
-                        } catch (Exception e) {
-                            log.error("Error saving post", e);
-                            return Flux.just("event: error\ndata: Failed to save post\n\n");
-                        }
+                        String contentJson = String.format(
+                                "{\"content\":\"%s\"}",
+                                content.replace("\"", "\\\"").replace("\n", "\\n")
+                        );
+                        return Flux.just("event: done\ndata: " + contentJson + "\n\n");
                     }
                     return Flux.just("event: error\ndata: No content generated\n\n");
                 }))
@@ -216,5 +210,43 @@ public class PostController {
                     log.error("Error in streaming post generation", e);
                     return Flux.just("event: error\ndata: " + e.getMessage() + "\n\n");
                 });
+    }
+
+    /**
+     * 创建帖子（用户确认后调用）
+     */
+    @PostMapping("/create")
+    public ResponseEntity<Map<String, Object>> createPost(
+            @RequestBody Map<String, String> request,
+            @RequestHeader("Authorization") String authHeader) {
+
+        Long userId = authHelper.extractUserId(authHeader);
+        if (userId == null) {
+            return ResponseEntity.status(401).body(Map.of("error", "Unauthorized"));
+        }
+
+        Optional<User> userOpt = userService.findById(userId);
+        if (userOpt.isEmpty()) {
+            return ResponseEntity.status(404).body(Map.of("error", "User not found"));
+        }
+
+        String content = request.get("content");
+        if (content == null || content.trim().isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Content is required"));
+        }
+
+        try {
+            Post post = postService.createPost(userOpt.get(), content.trim(), null);
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("post", postService.toDTO(post));
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Error creating post", e);
+            return ResponseEntity.status(500).body(Map.of(
+                    "success", false,
+                    "error", "Failed to create post"
+            ));
+        }
     }
 }

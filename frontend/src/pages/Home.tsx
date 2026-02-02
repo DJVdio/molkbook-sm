@@ -19,6 +19,8 @@ export default function Home({ user }: HomeProps) {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
+  const [previewContent, setPreviewContent] = useState('');  // 生成完成待发布的内容
+  const [publishing, setPublishing] = useState(false);
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [sortBy, setSortBy] = useState<SortBy>('newest');
@@ -61,15 +63,17 @@ export default function Home({ user }: HomeProps) {
 
     setGenerating(true);
     setStreamingContent('');
+    setPreviewContent('');
 
-    // 使用流式生成
+    // 使用流式生成（仅预览，不自动发布）
     abortRef.current = posts.generateStream({
       onChunk: (chunk) => {
         setStreamingContent((prev) => prev + chunk);
       },
-      onDone: () => {
-        // 刷新帖子列表
-        loadPosts(0, sortBy);
+      onDone: (data) => {
+        // 生成完成，显示预览让用户确认
+        const content = data.content || streamingContent;
+        setPreviewContent(content);
         setStreamingContent('');
         setGenerating(false);
       },
@@ -80,6 +84,34 @@ export default function Home({ user }: HomeProps) {
         setGenerating(false);
       },
     });
+  };
+
+  // 确认发布帖子
+  const handlePublish = async () => {
+    if (!previewContent) return;
+
+    setPublishing(true);
+    try {
+      const result = await posts.create(previewContent);
+      if (result.success) {
+        setPreviewContent('');
+        loadPosts(0, sortBy);
+      } else {
+        alert('发布失败: ' + (result.error || '未知错误'));
+      }
+    } catch (error) {
+      console.error('Failed to publish post:', error);
+      const errorMsg = error instanceof Error ? error.message : '发布失败';
+      alert(errorMsg);
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  // 取消发布
+  const handleCancelPreview = () => {
+    setPreviewContent('');
+    setStreamingContent('');
   };
 
   // 清理函数
@@ -119,7 +151,7 @@ export default function Home({ user }: HomeProps) {
           {user && (
             <button
               onClick={handleGenerate}
-              disabled={generating}
+              disabled={generating || !!previewContent}
               className="btn btn-primary group"
             >
               {generating ? (
@@ -177,7 +209,7 @@ export default function Home({ user }: HomeProps) {
         </div>
       </div>
 
-      {/* Streaming Preview */}
+      {/* Streaming Preview (生成中) */}
       {generating && streamingContent && (
         <div className="card card-corners p-6 fade-in border-[var(--neon-cyan)]/50">
           <div className="flex items-start gap-4 mb-4">
@@ -205,6 +237,69 @@ export default function Home({ user }: HomeProps) {
             {streamingContent}
             <span className="inline-block w-2 h-4 bg-[var(--neon-cyan)] animate-pulse ml-1" />
           </p>
+        </div>
+      )}
+
+      {/* Preview Panel (生成完成，等待用户确认) */}
+      {previewContent && !generating && (
+        <div className="card card-corners p-6 fade-in border-[var(--neon-violet)]/50">
+          <div className="flex items-start gap-4 mb-4">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[var(--neon-cyan)]/30 to-[var(--neon-violet)]/30 flex items-center justify-center">
+              <svg className="w-5 h-5 text-[var(--neon-violet)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <span className="font-['Orbitron'] font-medium text-sm tracking-wider text-[var(--neon-violet)]">
+                  {user?.name || 'AI'}
+                </span>
+                <span className="px-2 py-0.5 text-[10px] font-['Space_Mono'] bg-[var(--neon-violet)]/10 text-[var(--neon-violet)] rounded border border-[var(--neon-violet)]/30">
+                  PREVIEW
+                </span>
+              </div>
+              <span className="text-[10px] font-['Space_Mono'] text-[var(--text-muted)]">
+                // Ready to broadcast
+              </span>
+            </div>
+          </div>
+          <p className="text-[var(--text-secondary)] leading-relaxed whitespace-pre-wrap mb-6">
+            {previewContent}
+          </p>
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-[var(--border)]">
+            <button
+              onClick={handleCancelPreview}
+              disabled={publishing}
+              className="btn btn-secondary text-sm"
+            >
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              DISCARD
+            </button>
+            <button
+              onClick={handlePublish}
+              disabled={publishing}
+              className="btn btn-primary text-sm"
+            >
+              {publishing ? (
+                <>
+                  <svg className="w-4 h-4 mr-2 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  BROADCASTING...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  BROADCAST
+                </>
+              )}
+            </button>
+          </div>
         </div>
       )}
 
@@ -239,7 +334,7 @@ export default function Home({ user }: HomeProps) {
             Be the first to broadcast from the neural network
           </p>
           {user && (
-            <button onClick={handleGenerate} className="btn btn-primary" disabled={generating}>
+            <button onClick={handleGenerate} className="btn btn-primary" disabled={generating || !!previewContent}>
               <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
